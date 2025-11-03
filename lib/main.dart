@@ -7,6 +7,7 @@ import 'screens/login_screen.dart';
 import 'screens/catalogo_screen.dart';
 import 'screens/carrito_screen.dart';
 import 'screens/perfil_screen.dart';
+import 'screens/tienda_screen.dart'; // 👈 NUEVO: Importar la pantalla de ubicación
 //import 'screens/CRUD_screen.dart';
 //import 'screens/produccion_screen.dart';
 
@@ -91,6 +92,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ValueNotifier para el contador de productos en el carrito
   final ValueNotifier<int> cartCountNotifier = ValueNotifier<int>(0);
+  
+  // 👇 NUEVO: Lista para compartir el carrito entre pantallas
+  final List<Map<String, dynamic>> carrito = [];
 
   @override
   void initState() {
@@ -130,10 +134,12 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    // 👇 ACTUALIZADO: Agregamos TiendaScreen a las páginas
     final List<Widget> pages = _isAdmin
         ? [
             CatalogoScreen(onCartChanged: updateCartCount),
             CarritoScreen(onCartChanged: updateCartCount),
+            TiendaScreen(carrito: carrito), // 👈 NUEVO
             //CRUDScreen(),
             //ProduccionScreen(),
             PerfilScreen(),
@@ -141,9 +147,11 @@ class _HomeScreenState extends State<HomeScreen> {
         : [
             CatalogoScreen(onCartChanged: updateCartCount),
             CarritoScreen(onCartChanged: updateCartCount),
+            TiendaScreen(carrito: carrito), // 👈 NUEVO
             PerfilScreen(),
           ];
 
+    // 👇 ACTUALIZADO: Agregamos el botón de ubicación
     final List<BottomNavigationBarItem> navItems = _isAdmin
         ? [
             const BottomNavigationBarItem(
@@ -186,6 +194,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               label: 'Carrito',
             ),
+            const BottomNavigationBarItem(
+                icon: Icon(Icons.location_on), label: 'Tienda'), // 👈 NUEVO
             //const BottomNavigationBarItem(icon: Icon(Icons.inventory), label: 'CRUD'),
             //const BottomNavigationBarItem(icon: Icon(Icons.production_quantity_limits), label: 'Producción'),
             const BottomNavigationBarItem(
@@ -232,6 +242,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               label: 'Carrito',
             ),
+            const BottomNavigationBarItem(
+                icon: Icon(Icons.location_on), label: 'Tienda'), // 👈 NUEVO
             const BottomNavigationBarItem(
                 icon: Icon(Icons.person), label: 'Perfil'),
           ];
