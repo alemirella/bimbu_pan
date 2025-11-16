@@ -3,13 +3,14 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Pantallas existentes
 import 'screens/login_screen.dart';
 import 'screens/catalogo_screen.dart';
 import 'screens/carrito_screen.dart';
 import 'screens/perfil_screen.dart';
-import 'screens/tienda_screen.dart'; // 👈 NUEVO: Importar la pantalla de ubicación
-//import 'screens/CRUD_screen.dart';
-//import 'screens/produccion_screen.dart';
+import 'screens/tienda_screen.dart';
+import 'screens/ofertas_screen.dart';
+import 'screens/historial_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -90,10 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isAdmin = false;
   bool _loading = true;
 
-  // ValueNotifier para el contador de productos en el carrito
   final ValueNotifier<int> cartCountNotifier = ValueNotifier<int>(0);
-  
-  // 👇 NUEVO: Lista para compartir el carrito entre pantallas
   final List<Map<String, dynamic>> carrito = [];
 
   @override
@@ -121,9 +119,43 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _selectedIndex = index);
   }
 
-  // Método público para actualizar el contador (desde CatalogoScreen)
   void updateCartCount(int count) {
     cartCountNotifier.value = count;
+  }
+
+  void _abrirCarrito() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFFFF3E0),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade400,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(
+                child: CarritoScreen(onCartChanged: updateCartCount),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -134,119 +166,39 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // 👇 ACTUALIZADO: Agregamos TiendaScreen a las páginas
-    final List<Widget> pages = _isAdmin
-        ? [
-            CatalogoScreen(onCartChanged: updateCartCount),
-            CarritoScreen(onCartChanged: updateCartCount),
-            TiendaScreen(carrito: carrito), // 👈 NUEVO
-            //CRUDScreen(),
-            //ProduccionScreen(),
-            PerfilScreen(),
-          ]
-        : [
-            CatalogoScreen(onCartChanged: updateCartCount),
-            CarritoScreen(onCartChanged: updateCartCount),
-            TiendaScreen(carrito: carrito), // 👈 NUEVO
-            PerfilScreen(),
-          ];
+    final List<Widget> pages = [
+      CatalogoScreen(onCartChanged: updateCartCount),
+      OfertasScreen(onCartChanged: updateCartCount),
+      TiendaScreen(carrito: carrito),
+      const HistorialPedidosScreen(), // Agregar esta línea
+      PerfilScreen(),
+    ];
 
-    // 👇 ACTUALIZADO: Agregamos el botón de ubicación
-    final List<BottomNavigationBarItem> navItems = _isAdmin
-        ? [
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.storefront), label: 'Catálogo'),
-            BottomNavigationBarItem(
-              icon: ValueListenableBuilder<int>(
-                valueListenable: cartCountNotifier,
-                builder: (context, count, child) {
-                  return Stack(
-                    children: [
-                      const Icon(Icons.shopping_cart),
-                      if (count > 0)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(1),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        )
-                    ],
-                  );
-                },
-              ),
-              label: 'Carrito',
-            ),
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.location_on), label: 'Tienda'), // 👈 NUEVO
-            //const BottomNavigationBarItem(icon: Icon(Icons.inventory), label: 'CRUD'),
-            //const BottomNavigationBarItem(icon: Icon(Icons.production_quantity_limits), label: 'Producción'),
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.person), label: 'Perfil'),
-          ]
-        : [
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.storefront), label: 'Catálogo'),
-            BottomNavigationBarItem(
-              icon: ValueListenableBuilder<int>(
-                valueListenable: cartCountNotifier,
-                builder: (context, count, child) {
-                  return Stack(
-                    children: [
-                      const Icon(Icons.shopping_cart),
-                      if (count > 0)
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(1),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        )
-                    ],
-                  );
-                },
-              ),
-              label: 'Carrito',
-            ),
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.location_on), label: 'Tienda'), // 👈 NUEVO
-            const BottomNavigationBarItem(
-                icon: Icon(Icons.person), label: 'Perfil'),
-          ];
+    final List<BottomNavigationBarItem> navItems = [
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.storefront),
+        label: 'Catálogo',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.local_fire_department),
+        label: 'Ofertas',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.location_on),
+        label: 'Tienda',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.history),
+        label: 'Historial',
+      ),
+      const BottomNavigationBarItem(
+        icon: Icon(Icons.person),
+        label: 'Perfil',
+      ),
+    ];
+
+    // 🛒 Solo mostrar el carrito en Catálogo (índice 0) y Ofertas (índice 1)
+    final bool mostrarCarrito = _selectedIndex == 0 || _selectedIndex == 1;
 
     return Scaffold(
       appBar: AppBar(
@@ -269,6 +221,55 @@ class _HomeScreenState extends State<HomeScreen> {
         type: BottomNavigationBarType.fixed,
         items: navItems,
       ),
+      // 🛒 BOTÓN FLOTANTE DEL CARRITO - Solo visible en Catálogo y Ofertas
+      floatingActionButton: mostrarCarrito
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 4.0),
+              child: ValueListenableBuilder<int>(
+                valueListenable: cartCountNotifier,
+                builder: (context, count, child) {
+                  return FloatingActionButton(
+                    onPressed: _abrirCarrito,
+                    backgroundColor: const Color(0xFFFF8C42),
+                    child: Stack(
+                      children: [
+                        const Center(
+                          child: Icon(Icons.shopping_cart, size: 28, color: Colors.white),
+                        ),
+                        if (count > 0)
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 20,
+                                minHeight: 20,
+                              ),
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }

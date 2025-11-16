@@ -188,17 +188,18 @@ class _TiendaScreenState extends State<TiendaScreen> {
                     zoom: 14,
                   ),
                   markers: {
-                    Marker(
+                   Marker(
                       markerId: const MarkerId('usuario'),
                       position: ubicacionUsuario!,
                       infoWindow: const InfoWindow(title: 'Tu ubicación'),
-                      icon: BitmapDescriptor.defaultMarkerWithHue(
-                          BitmapDescriptor.hueAzure),
+                      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange), // color naranja (más parecido a tu app)
                     ),
+
                     Marker(
                       markerId: const MarkerId('tienda'),
                       position: ubicacionTienda!,
                       infoWindow: const InfoWindow(title: 'Panadería BIMBU'),
+                      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueMagenta), // otro color de referencia cercano
                     ),
                   },
                   polylines: polylines,

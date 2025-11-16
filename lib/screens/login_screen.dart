@@ -27,11 +27,13 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _password.text,
       );
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error login: ${e.message}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error login: ${e.message}')),
+        );
+      }
     } finally {
-      setState(() => _cargando = false);
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
@@ -40,9 +42,11 @@ class _LoginScreenState extends State<LoginScreen> {
         _telefono.text.trim().isEmpty ||
         _email.text.trim().isEmpty ||
         _password.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completa todos los campos de registro')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Completa todos los campos de registro')),
+        );
+      }
       return;
     }
     setState(() => _cargando = true);
@@ -62,15 +66,19 @@ class _LoginScreenState extends State<LoginScreen> {
           'uid': user.uid,
         });
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Registro exitoso')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Registro exitoso')),
+        );
+      }
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error registro: ${e.message}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error registro: ${e.message}')),
+        );
+      }
     } finally {
-      setState(() => _cargando = false);
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
@@ -102,42 +110,57 @@ class _LoginScreenState extends State<LoginScreen> {
                   _registrando = i == 1;
                 });
               },
-              children: const [Padding(padding: EdgeInsets.all(8), child: Text('Login')), Padding(padding: EdgeInsets.all(8), child: Text('Registro'))],
+              children: const [
+                Padding(padding: EdgeInsets.all(8), child: Text('Login')),
+                Padding(padding: EdgeInsets.all(8), child: Text('Registro')),
+              ],
             ),
             const SizedBox(height: 16),
             if (_registrando) ...[
               TextField(
                 controller: _nombre,
-                decoration: const InputDecoration(labelText: 'Nombre', icon: Icon(Icons.person)),
+                decoration:
+                    const InputDecoration(labelText: 'Nombre', icon: Icon(Icons.person)),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: _telefono,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Teléfono', icon: Icon(Icons.phone)),
+                decoration:
+                    const InputDecoration(labelText: 'Teléfono', icon: Icon(Icons.phone)),
               ),
               const SizedBox(height: 10),
             ],
             TextField(
               controller: _email,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email', icon: Icon(Icons.email)),
+              decoration:
+                  const InputDecoration(labelText: 'Email', icon: Icon(Icons.email)),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _password,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Contraseña', icon: Icon(Icons.lock)),
+              decoration:
+                  const InputDecoration(labelText: 'Contraseña', icon: Icon(Icons.lock)),
             ),
             const SizedBox(height: 16),
-            _cargando ? const CircularProgressIndicator() : ElevatedButton.icon(
-              onPressed: _registrando ? _register : _login,
-              icon: Icon(_registrando ? Icons.app_registration : Icons.login),
-              label: Text(_registrando ? 'Registrarme' : 'Iniciar sesión'),
-              style: ElevatedButton.styleFrom(backgroundColor: _registrando ? const Color.fromARGB(255, 240, 129, 19) : const Color.fromARGB(255, 255, 189, 66)),
-            ),
+            _cargando
+                ? const CircularProgressIndicator()
+                : ElevatedButton.icon(
+                    onPressed: _registrando ? _register : _login,
+                    icon: Icon(_registrando ? Icons.app_registration : Icons.login),
+                    label:
+                        Text(_registrando ? 'Registrarme' : 'Iniciar sesión'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _registrando
+                          ? const Color.fromARGB(255, 240, 129, 19)
+                          : const Color.fromARGB(255, 255, 189, 66),
+                    ),
+                  ),
             const SizedBox(height: 16),
-            const Text('BIMBU - Panadería', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Text('BIMBU - Panadería',
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
           ],
         ),
       ),

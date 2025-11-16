@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'pedido_service.dart';
 
 class SimpleCart {
   SimpleCart._privateConstructor();
@@ -140,73 +141,39 @@ class _CarritoScreenState extends State<CarritoScreen> {
     widget.onCartChanged(0);
   }
 
-  Future<void> _finalizarCompra() async {
+  void finalizarCompra() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Debes iniciar sesión para comprar')));
-      return;
-    }
-    final items = SimpleCart.instance.items;
-    if (items.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Carrito vacío')));
-      return;
-    }
+    if (user == null) return;
 
-    setState(() => _procesando = true);
     try {
-      final batch = FirebaseFirestore.instance.batch();
+      // Convertir los productos del carrito al formato requerido
+      final productos = SimpleCart.instance.items.map((item) => {
+        'nombre': item['nombre'],
+        'cantidad': item['cantidad'],
+        'precio': item['precio'],
+      }).toList();
 
-      for (var item in items) {
-        final docRef =
-            FirebaseFirestore.instance.collection('productos').doc(item['id']);
-        final docSnap = await docRef.get();
+      await PedidoService.agregarPedidoAlHistorial(
+        userId: user.uid,
+        productos: productos,
+        total: SimpleCart.instance.total,
+        direccion: '', // Aquí debes proporcionar la dirección, si es necesaria
+      );
 
-        if (!docSnap.exists) {
-          throw Exception('El producto ${item['nombre']} no existe.');
-        }
-
-        final currentStock = docSnap['stock'] ?? 0;
-        final newStock = currentStock - item['cantidad'];
-
-        if (newStock < 0) {
-          throw Exception('Stock insuficiente para el producto ${item['nombre']}');
-        }
-
-        batch.update(docRef, {'stock': newStock});
-      }
-
-      final venta = {
-        'email': user.email,
-        'fecha': FieldValue.serverTimestamp(),
-        'productos': items
-            .map((it) => {
-                  'cantidad': it['cantidad'],
-                  'nombre': it['nombre'],
-                  'precio': it['precio'],
-                })
-            .toList(),
-        'total': SimpleCart.instance.total,
-        'uid': user.uid,
-      };
-
-      final ventasRef = FirebaseFirestore.instance.collection('ventas');
-      batch.set(ventasRef.doc(), venta);
-
-      await batch.commit();
-
+      // Limpiar el carrito
       SimpleCart.instance.clear();
       widget.onCartChanged(0);
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Compra realizada con éxito')));
-      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('¡Pedido realizado con éxito!')),
+      );
+
+      Navigator.pop(context); // Cerrar el carrito
+
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error al procesar compra: $e')));
-    } finally {
-      setState(() => _procesando = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al procesar el pedido')),
+      );
     }
   }
 
@@ -291,7 +258,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
                   children: [
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: SimpleCart.instance.items.isEmpty ? null : _finalizarCompra,
+                        onPressed: SimpleCart.instance.items.isEmpty ? null : finalizarCompra,
                         style: ElevatedButton.styleFrom(
                             backgroundColor: const Color.fromARGB(255, 204, 170, 79)),
                         child: const Text('Finalizar compra'),
