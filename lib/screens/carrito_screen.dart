@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'pedido_service.dart';
+import 'checkout_screen.dart';
 
 class SimpleCart {
   SimpleCart._privateConstructor();
@@ -106,6 +107,23 @@ class CarritoScreen extends StatefulWidget {
 
 class _CarritoScreenState extends State<CarritoScreen> {
   bool _procesando = false;
+  List<Map<String, dynamic>> _productosConProblemas = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _validarStockInicial();
+  }
+
+  Future<void> _validarStockInicial() async {
+    final resultado = await PedidoService.validarStockCarrito(
+        SimpleCart.instance.items);
+    if (!resultado['stockSuficiente']) {
+      setState(() {
+        _productosConProblemas = resultado['productos'];
+      });
+    }
+  }
 
   void _updateCartCounter() {
     final count = SimpleCart.instance.items.fold<int>(
@@ -118,6 +136,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
       SimpleCart.instance.increment(id);
     });
     _updateCartCounter();
+    _validarStockInicial();
   }
 
   void _decrementItem(String id) {
@@ -125,6 +144,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
       SimpleCart.instance.decrement(id);
     });
     _updateCartCounter();
+    _validarStockInicial();
   }
 
   void _removeItem(String id) {
@@ -132,48 +152,57 @@ class _CarritoScreenState extends State<CarritoScreen> {
       SimpleCart.instance.removeItem(id);
     });
     _updateCartCounter();
+    _validarStockInicial();
   }
 
   void _clearCart() {
     setState(() {
       SimpleCart.instance.clear();
+      _productosConProblemas.clear();
     });
     widget.onCartChanged(0);
   }
 
-  void finalizarCompra() async {
+  Future<void> _irACheckout() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    try {
-      // Convertir los productos del carrito al formato requerido
-      final productos = SimpleCart.instance.items.map((item) => {
-        'nombre': item['nombre'],
-        'cantidad': item['cantidad'],
-        'precio': item['precio'],
-      }).toList();
+    // Validar stock nuevamente antes de ir al checkout
+    final resultado = await PedidoService.validarStockCarrito(
+        SimpleCart.instance.items);
 
-      await PedidoService.agregarPedidoAlHistorial(
-        userId: user.uid,
-        productos: productos,
-        total: SimpleCart.instance.total,
-        direccion: '', // Aquí debes proporcionar la dirección, si es necesaria
+    if (!resultado['stockSuficiente']) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Algunos productos no tienen stock suficiente'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Navegar a pantalla de checkout
+    if (mounted) {
+      final resultado = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CheckoutScreen(
+            items: SimpleCart.instance.items,
+            total: SimpleCart.instance.total,
+          ),
+        ),
       );
 
-      // Limpiar el carrito
-      SimpleCart.instance.clear();
-      widget.onCartChanged(0);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('¡Pedido realizado con éxito!')),
-      );
-
-      Navigator.pop(context); // Cerrar el carrito
-
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al procesar el pedido')),
-      );
+      // Si el pedido fue exitoso, limpiar carrito
+      if (resultado == true) {
+        SimpleCart.instance.clear();
+        widget.onCartChanged(0);
+        if (mounted) {
+          Navigator.pop(context); // Cerrar el modal del carrito
+        }
+      }
     }
   }
 
@@ -184,8 +213,46 @@ class _CarritoScreenState extends State<CarritoScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          const Text('Tu Carrito', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Tu Carrito',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
+          
+          // Mostrar advertencias de stock
+          if (_productosConProblemas.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                border: Border.all(color: Colors.red.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Problemas de stock:',
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...(_productosConProblemas.map((p) => Text(
+                        '• ${p['nombre']}: Solicitaste ${p['solicitado']}, disponible: ${p['disponible']}',
+                        style: TextStyle(fontSize: 12, color: Colors.red.shade900),
+                      ))),
+                ],
+              ),
+            ),
+          ],
+
           Expanded(
             child: items.isEmpty
                 ? const Center(child: Text('No hay productos en el carrito.'))
@@ -194,12 +261,20 @@ class _CarritoScreenState extends State<CarritoScreen> {
                     itemBuilder: (context, index) {
                       final it = items[index];
                       final item = SimpleCart.instance.getItemById(it['id']);
-                      if (item == null) return Container(); // seguridad
+                      if (item == null) return Container();
+
+                      // Verificar si este producto tiene problema de stock
+                      final tieneProblema = _productosConProblemas
+                          .any((p) => p['nombre'] == item['nombre']);
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 6),
+                        color: tieneProblema
+                            ? Colors.red.shade50
+                            : Colors.white,
                         child: ListTile(
-                          leading: item['imagen'] != null && item['imagen'].isNotEmpty
+                          leading: item['imagen'] != null &&
+                                  item['imagen'].isNotEmpty
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: Image.network(
@@ -207,8 +282,10 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                     width: 50,
                                     height: 50,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        const Icon(Icons.broken_image, size: 40),
+                                    errorBuilder:
+                                        (context, error, stackTrace) =>
+                                            const Icon(Icons.broken_image,
+                                                size: 40),
                                   ),
                                 )
                               : const Icon(Icons.shopping_bag),
@@ -216,7 +293,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
                           subtitle: Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.remove_circle_outline),
+                                icon:
+                                    const Icon(Icons.remove_circle_outline),
                                 onPressed: () => _decrementItem(it['id']),
                               ),
                               Text('${item['cantidad']}'),
@@ -224,10 +302,13 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                 icon: const Icon(Icons.add_circle_outline),
                                 onPressed: () {
                                   if (item['cantidad'] >= item['stock']) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
                                       SnackBar(
-                                        content: Text('Stock máximo alcanzado para ${item['nombre']}'),
-                                        duration: const Duration(milliseconds: 500),
+                                        content: Text(
+                                            'Stock máximo alcanzado para ${item['nombre']}'),
+                                        duration:
+                                            const Duration(milliseconds: 500),
                                       ),
                                     );
                                     return;
@@ -236,7 +317,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
                                 },
                               ),
                               const SizedBox(width: 10),
-                              Text('S/ ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}'),
+                              Text(
+                                  'S/ ${(item['precio'] * item['cantidad']).toStringAsFixed(2)}'),
                             ],
                           ),
                           trailing: IconButton(
@@ -250,7 +332,8 @@ class _CarritoScreenState extends State<CarritoScreen> {
           ),
           const SizedBox(height: 8),
           Text('Total: S/ ${SimpleCart.instance.total.toStringAsFixed(2)}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           _procesando
               ? const CircularProgressIndicator()
@@ -258,17 +341,24 @@ class _CarritoScreenState extends State<CarritoScreen> {
                   children: [
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: SimpleCart.instance.items.isEmpty ? null : finalizarCompra,
+                        onPressed: SimpleCart.instance.items.isEmpty ||
+                                _productosConProblemas.isNotEmpty
+                            ? null
+                            : _irACheckout,
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color.fromARGB(255, 204, 170, 79)),
-                        child: const Text('Finalizar compra'),
+                            backgroundColor:
+                                const Color.fromARGB(255, 204, 170, 79)),
+                        child: const Text('Continuar compra'),
                       ),
                     ),
                     const SizedBox(width: 10),
                     ElevatedButton(
-                      onPressed: SimpleCart.instance.items.isEmpty ? null : _clearCart,
-                      style:
-                          ElevatedButton.styleFrom(backgroundColor: const Color.fromARGB(255, 220, 66, 66)),
+                      onPressed: SimpleCart.instance.items.isEmpty
+                          ? null
+                          : _clearCart,
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              const Color.fromARGB(255, 220, 66, 66)),
                       child: const Text('Vaciar'),
                     ),
                   ],

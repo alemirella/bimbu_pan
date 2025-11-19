@@ -43,7 +43,7 @@ class BimbuApp extends StatelessWidget {
             backgroundColor: const Color(0xFFFF8C42),
             foregroundColor: Colors.white,
             textStyle: const TextStyle(fontWeight: FontWeight.bold),
-            shape: RoundedRectangleBorder(
+            shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.all(Radius.circular(12)),
             ),
           ),
@@ -170,8 +170,8 @@ class _HomeScreenState extends State<HomeScreen> {
       CatalogoScreen(onCartChanged: updateCartCount),
       OfertasScreen(onCartChanged: updateCartCount),
       TiendaScreen(carrito: carrito),
-      const HistorialPedidosScreen(), // Agregar esta línea
-      PerfilScreen(),
+      const HistorialPedidosScreen(),
+      const PerfilScreen(),
     ];
 
     final List<BottomNavigationBarItem> navItems = [

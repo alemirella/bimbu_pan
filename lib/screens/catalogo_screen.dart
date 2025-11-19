@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'carrito_screen.dart';
 
 class CatalogoScreen extends StatefulWidget {
@@ -15,6 +16,68 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
       FirebaseFirestore.instance.collection('productos').orderBy('nombre');
   String _busqueda = '';
   Set<String> favoritos = {};
+  bool _cargandoFavoritos = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarFavoritos();
+  }
+
+  Future<void> _cargarFavoritos() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _cargandoFavoritos = false);
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .get();
+
+      if (doc.exists && doc.data()?['favoritos'] != null) {
+        setState(() {
+          favoritos = Set<String>.from(doc.data()!['favoritos'] as List);
+          _cargandoFavoritos = false;
+        });
+      } else {
+        setState(() => _cargandoFavoritos = false);
+      }
+    } catch (e) {
+      print('Error al cargar favoritos: $e');
+      setState(() => _cargandoFavoritos = false);
+    }
+  }
+
+  Future<void> _toggleFavorito(String productoId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      if (favoritos.contains(productoId)) {
+        favoritos.remove(productoId);
+      } else {
+        favoritos.add(productoId);
+      }
+    });
+
+    // Guardar en Firestore
+    try {
+      await FirebaseFirestore.instance
+          .collection('usuarios')
+          .doc(user.uid)
+          .set({
+        'favoritos': favoritos.toList(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      print('Error al guardar favorito: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al guardar favorito')),
+      );
+    }
+  }
 
   void _agregarAlCarrito(Map<String, dynamic> producto) {
     final stock = producto['stock'] ?? 0;
@@ -55,6 +118,10 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_cargandoFavoritos) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Column(
       children: [
         Padding(
@@ -88,8 +155,15 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
                 return const Center(child: CircularProgressIndicator());
               }
 
+              // 🔥 FILTRAR: Excluir productos en oferta
               var productos = snapshot.data!.docs.where((doc) {
                 final data = doc.data()! as Map<String, dynamic>;
+                
+                // ⚠️ Si está en oferta, NO mostrarlo en catálogo
+                final enOferta = data['en_oferta'] ?? false;
+                if (enOferta == true) return false;
+                
+                // Filtro de búsqueda normal
                 final nombre = (data['nombre'] ?? '').toString().toLowerCase();
                 return nombre.startsWith(_busqueda);
               }).toList();
@@ -169,15 +243,7 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
                                 ),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
-                                onPressed: () {
-                                  setState(() {
-                                    if (favoritos.contains(doc.id)) {
-                                      favoritos.remove(doc.id);
-                                    } else {
-                                      favoritos.add(doc.id);
-                                    }
-                                  });
-                                },
+                                onPressed: () => _toggleFavorito(doc.id),
                               ),
                             ],
                           ),
@@ -234,7 +300,7 @@ class _CatalogoScreenState extends State<CatalogoScreen> {
                                 style: const TextStyle(
                                   fontSize: 27,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFFFF8C42), // Color de referencia
+                                  color: Color(0xFFFF8C42),
                                 ),
                               ),
                               Text(

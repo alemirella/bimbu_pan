@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -19,6 +20,32 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _registrando = false;
   bool _cargando = false;
 
+  // Función para traducir errores de Firebase al español
+  String _traducirErrorFirebase(String codigo) {
+    switch (codigo) {
+      case 'user-not-found':
+        return 'No existe una cuenta con este correo';
+      case 'wrong-password':
+        return 'Contraseña incorrecta';
+      case 'email-already-in-use':
+        return 'Este correo ya está registrado';
+      case 'invalid-email':
+        return 'Correo electrónico inválido';
+      case 'weak-password':
+        return 'La contraseña debe tener al menos 6 caracteres';
+      case 'operation-not-allowed':
+        return 'Operación no permitida';
+      case 'invalid-credential':
+        return 'Credenciales inválidas';
+      case 'too-many-requests':
+        return 'Demasiados intentos. Intenta más tarde';
+      case 'network-request-failed':
+        return 'Error de conexión. Verifica tu internet';
+      default:
+        return 'Error: $codigo';
+    }
+  }
+
   Future<void> _login() async {
     setState(() => _cargando = true);
     try {
@@ -29,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error login: ${e.message}')),
+          SnackBar(content: Text(_traducirErrorFirebase(e.code))),
         );
       }
     } finally {
@@ -49,6 +76,17 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       return;
     }
+
+    // Validar que el teléfono tenga exactamente 9 dígitos
+    if (_telefono.text.trim().length != 9) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('El teléfono debe tener 9 dígitos')),
+        );
+      }
+      return;
+    }
+
     setState(() => _cargando = true);
     try {
       final result = await FirebaseAuth.instance.createUserWithEmailAndPassword(
@@ -74,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on FirebaseAuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error registro: ${e.message}')),
+          SnackBar(content: Text(_traducirErrorFirebase(e.code))),
         );
       }
     } finally {
@@ -126,8 +164,14 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _telefono,
                 keyboardType: TextInputType.phone,
-                decoration:
-                    const InputDecoration(labelText: 'Teléfono', icon: Icon(Icons.phone)),
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(9),
+                ],
+                decoration: const InputDecoration(
+                  labelText: 'Teléfono (9 dígitos)',
+                  icon: Icon(Icons.phone),
+                ),
               ),
               const SizedBox(height: 10),
             ],
