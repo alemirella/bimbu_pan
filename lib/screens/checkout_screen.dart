@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'pedido_service.dart';
+import 'horario_service.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final List<Map<String, dynamic>> items;
@@ -21,6 +22,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _tipoEmpaquetadoSeleccionado;
   final TextEditingController _direccionController = TextEditingController();
   bool _procesando = false;
+  bool _horarioValidado = false;
+  Map<String, dynamic>? _infoHorario;
 
   final List<Map<String, dynamic>> _metodosPago = [
     {'id': 'yape', 'nombre': 'Yape', 'icono': Icons.phone_android, 'color': Colors.purple},
@@ -60,6 +63,74 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     },
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _verificarHorario();
+  }
+
+  // 🕐 NUEVA FUNCIÓN: Verificar horario al cargar la pantalla
+  Future<void> _verificarHorario() async {
+    final resultado = await HorarioService.verificarHorarioAtencion();
+    setState(() {
+      _infoHorario = resultado;
+      _horarioValidado = true;
+    });
+
+    // Si está cerrado, mostrar diálogo inmediatamente
+    if (!resultado['abierto']) {
+      _mostrarDialogoHorarioCerrado();
+    }
+  }
+
+  // 🚫 Mostrar diálogo cuando está fuera de horario
+  void _mostrarDialogoHorarioCerrado() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.access_time, color: Colors.red.shade700, size: 28),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Fuera de horario')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _infoHorario?['mensaje'] ?? 'No estamos atendiendo en este momento',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text(
+              'Horario de atención:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _infoHorario?['horario'] ?? '',
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Cerrar diálogo
+              Navigator.pop(context); // Volver al carrito
+            },
+            child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
+
   double get _totalConEmpaquetado {
     if (_tipoEmpaquetadoSeleccionado == null) return widget.total;
     
@@ -72,6 +143,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _finalizarCompra() async {
+    // ⚠️ VALIDAR HORARIO NUEVAMENTE antes de procesar
+    final horarioActual = await HorarioService.verificarHorarioAtencion();
+    
+    if (!horarioActual['abierto']) {
+      _mostrarDialogoHorarioCerrado();
+      return;
+    }
+
     if (_metodoPagoSeleccionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona un método de pago')),
@@ -99,7 +178,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Usuario no autenticado');
 
-      // Convertir items para guardar en BD
       final productos = widget.items.map((item) => {
         'id': item['id'],
         'nombre': item['nombre'],
@@ -107,10 +185,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'precio': item['precio'],
       }).toList();
 
-      // PRIMERO: Reducir el stock inmediatamente
       await PedidoService.reducirStockInmediato(productos);
 
-      // SEGUNDO: Guardar el pedido en el historial
       await PedidoService.agregarPedidoAlHistorial(
         userId: user.uid,
         productos: productos,
@@ -124,9 +200,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('¡Pedido realizado con éxito!'),
+            backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context, true); // Retornar true para indicar éxito
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -149,6 +226,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Mostrar loading mientras se valida el horario
+    if (!_horarioValidado) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFFFF3E0),
+        appBar: AppBar(
+          title: const Text('Finalizar Compra'),
+          backgroundColor: const Color(0xFFFF8C42),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Si está cerrado, deshabilitar el botón de confirmar
+    final bool estaCerrado = !(_infoHorario?['abierto'] ?? false);
+
     return Scaffold(
       backgroundColor: const Color(0xFFFFF3E0),
       appBar: AppBar(
@@ -160,6 +252,35 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 🚨 ADVERTENCIA si está fuera de horario
+            if (estaCerrado) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  border: Border.all(color: Colors.red.shade300, width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.red.shade700, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _infoHorario?['mensaje'] ?? 'Fuera de horario',
+                        style: TextStyle(
+                          color: Colors.red.shade900,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             // Dirección de entrega
             const Text(
               'Dirección de entrega',
@@ -168,10 +289,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             const SizedBox(height: 10),
             TextField(
               controller: _direccionController,
+              enabled: !estaCerrado,
               decoration: InputDecoration(
                 hintText: 'Ej: Av. Principal 123, Junín',
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: estaCerrado ? Colors.grey.shade200 : Colors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -202,7 +324,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: RadioListTile<String>(
                 value: metodo['id'],
                 groupValue: _metodoPagoSeleccionado,
-                onChanged: (value) {
+                onChanged: estaCerrado ? null : (value) {
                   setState(() => _metodoPagoSeleccionado = value);
                 },
                 title: Row(
@@ -238,7 +360,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: RadioListTile<String>(
                 value: empaquetado['id'],
                 groupValue: _tipoEmpaquetadoSeleccionado,
-                onChanged: (value) {
+                onChanged: estaCerrado ? null : (value) {
                   setState(() => _tipoEmpaquetadoSeleccionado = value);
                 },
                 title: Row(
@@ -344,18 +466,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _procesando ? null : _finalizarCompra,
+                onPressed: (_procesando || estaCerrado) ? null : _finalizarCompra,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF8C42),
+                  backgroundColor: estaCerrado ? Colors.grey : const Color(0xFFFF8C42),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 child: _procesando
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        'Confirmar Pedido',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    : Text(
+                        estaCerrado ? 'Fuera de horario' : 'Confirmar Pedido',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
               ),
             ),

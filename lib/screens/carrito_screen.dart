@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'pedido_service.dart';
 import 'checkout_screen.dart';
+import 'horario_service.dart';
+
 
 class SimpleCart {
   SimpleCart._privateConstructor();
@@ -163,11 +165,55 @@ class _CarritoScreenState extends State<CarritoScreen> {
     widget.onCartChanged(0);
   }
 
+  // En carrito_screen.dart, actualiza la función _irACheckout:
+
   Future<void> _irACheckout() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    // Validar stock nuevamente antes de ir al checkout
+    // 🕐 VALIDAR HORARIO antes de permitir checkout
+    final horario = await HorarioService.verificarHorarioAtencion();
+    
+    if (!horario['abierto']) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.access_time, color: Colors.red.shade700),
+                const SizedBox(width: 10),
+                const Text('Fuera de horario'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(horario['mensaje']),
+                const SizedBox(height: 16),
+                const Divider(),
+                const Text(
+                  'Horario de atención:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(horario['horario']),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Entendido'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    // Validar stock
     final resultado = await PedidoService.validarStockCarrito(
         SimpleCart.instance.items);
 
@@ -183,7 +229,7 @@ class _CarritoScreenState extends State<CarritoScreen> {
       return;
     }
 
-    // Navegar a pantalla de checkout
+    // Navegar a checkout
     if (mounted) {
       final resultado = await Navigator.push(
         context,
@@ -195,12 +241,11 @@ class _CarritoScreenState extends State<CarritoScreen> {
         ),
       );
 
-      // Si el pedido fue exitoso, limpiar carrito
       if (resultado == true) {
         SimpleCart.instance.clear();
         widget.onCartChanged(0);
         if (mounted) {
-          Navigator.pop(context); // Cerrar el modal del carrito
+          Navigator.pop(context);
         }
       }
     }
